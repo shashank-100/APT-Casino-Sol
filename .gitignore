@@ -1,0 +1,50 @@
+# Node modules
+node_modules/
+
+# Build output
+.next/
+out/
+build/
+dist/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.*
+
+# Editor directories and files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Hardhat artifacts
+artifacts/
+cache/
+coverage/
+web3-contracts/artifacts/
+web3-contracts/cache/
+
+# TypeScript
+*.tsbuildinfo
+
+# Misc
+*.log
+*.tgz
+
+# Ignore lock files except one (if you want to keep only one lock file, adjust as needed)
+# package-lock.json
+yarn.lock
+pnpm-lock.yaml 
