@@ -70,8 +70,11 @@
     "wagmi": "^2.15.2"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/node": "22.15.15",
+    "mocha": "^11.7.1",
     "tailwind-scrollbar": "^3.0.4",
+    "ts-node": "^10.9.2",
     "typescript": "5.8.3"
   }
 }

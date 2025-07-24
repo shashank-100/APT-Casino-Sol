@@ -58,7 +58,9 @@
     "@codama/cli": "^1.1.2",
     "@eslint/eslintrc": "^3.3.1",
     "@tailwindcss/postcss": "^4.1.11",
+    "@types/chai": "^5.2.2",
     "@types/jest": "^30.0.0",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^24.0.12",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
@@ -68,6 +70,8 @@
     "jest": "^30.0.4",
     "prettier": "^3.6.2",
     "tailwindcss": "^4.1.11",
+    "ts-jest": "^29.4.0",
+    "ts-node": "^10.9.2",
     "typescript": "^5.8.3",
     "ws": "^8.18.3"
   }
