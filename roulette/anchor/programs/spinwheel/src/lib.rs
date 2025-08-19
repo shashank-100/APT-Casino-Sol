@@ -38,6 +38,28 @@ pub mod spinwheel {
         require!(bet_amount <= game_state.max_bet, SpinWheelError::BetTooHigh);
         require!(prediction < 8, SpinWheelError::InvalidPrediction); // 8 segments (0-7)
         
+        // Ensure house vault can cover the worst-case payout after receiving the bet
+        let min_rent_balance = Rent::get()?.minimum_balance(8);
+        let base_payout = bet_amount
+            .checked_mul(8)
+            .ok_or(SpinWheelError::ArithmeticOverflow)?;
+        let house_cut = base_payout
+            .checked_mul(game_state.house_edge as u64)
+            .ok_or(SpinWheelError::ArithmeticOverflow)?
+            / 100;
+        let max_possible_payout = base_payout
+            .checked_sub(house_cut)
+            .ok_or(SpinWheelError::ArithmeticOverflow)?;
+        let projected_vault_balance = ctx
+            .accounts
+            .house_vault
+            .lamports()
+            .saturating_add(bet_amount);
+        require!(
+            projected_vault_balance.saturating_sub(max_possible_payout) >= min_rent_balance,
+            SpinWheelError::InsufficientHouseFunds
+        );
+
         // Transfer bet to house vault
         system_program::transfer(
             CpiContext::new(
@@ -66,7 +88,8 @@ pub mod spinwheel {
         
         // Calculate payout
         let (payout, is_winner) = if result == prediction {
-            let base_payout = bet_amount.checked_mul(7).ok_or(SpinWheelError::ArithmeticOverflow)?;
+            // Pay 8x on win so the player effectively receives 7x profit + original stake back
+            let base_payout = bet_amount.checked_mul(8).ok_or(SpinWheelError::ArithmeticOverflow)?;
             let house_cut = base_payout
                 .checked_mul(game_state.house_edge as u64)
                 .ok_or(SpinWheelError::ArithmeticOverflow)?
@@ -86,7 +109,11 @@ pub mod spinwheel {
         // Pay out winnings if applicable
         if is_winner && payout > 0 {
             let house_balance = ctx.accounts.house_vault.lamports();
-            require!(house_balance >= payout, SpinWheelError::InsufficientHouseFunds);
+            let min_rent_balance = Rent::get()?.minimum_balance(8);
+            require!(
+                house_balance.saturating_sub(payout) >= min_rent_balance,
+                SpinWheelError::InsufficientHouseFunds
+            );
             
             **ctx.accounts.house_vault.to_account_info().try_borrow_mut_lamports()? -= payout;
             **ctx.accounts.player.to_account_info().try_borrow_mut_lamports()? += payout;
@@ -136,14 +163,14 @@ pub mod spinwheel {
             game_state.house_edge = edge;
         }
         
-        if let Some(min) = min_bet {
-            require!(min > 0, SpinWheelError::InvalidBetRange);
-            game_state.min_bet = min;
-        }
-        
-        if let Some(max) = max_bet {
-            require!(max >= game_state.min_bet, SpinWheelError::InvalidBetRange);
-            game_state.max_bet = max;
+        // Apply min/max updates atomically to avoid invalid states
+        if min_bet.is_some() || max_bet.is_some() {
+            let new_min = min_bet.unwrap_or(game_state.min_bet);
+            let new_max = max_bet.unwrap_or(game_state.max_bet);
+            require!(new_min > 0, SpinWheelError::InvalidBetRange);
+            require!(new_max >= new_min, SpinWheelError::InvalidBetRange);
+            game_state.min_bet = new_min;
+            game_state.max_bet = new_max;
         }
         
         if let Some(paused) = is_paused {
@@ -162,7 +189,11 @@ pub mod spinwheel {
         require!(amount > 0, SpinWheelError::InvalidAmount);
         
         let house_balance = ctx.accounts.house_vault.lamports();
-        require!(house_balance >= amount, SpinWheelError::InsufficientHouseFunds);
+        let min_rent_balance = Rent::get()?.minimum_balance(8);
+        require!(
+            house_balance.saturating_sub(amount) >= min_rent_balance,
+            SpinWheelError::InsufficientHouseFunds
+        );
         
         **ctx.accounts.house_vault.to_account_info().try_borrow_mut_lamports()? -= amount;
         **ctx.accounts.authority.to_account_info().try_borrow_mut_lamports()? += amount;
@@ -209,7 +240,7 @@ pub struct Initialize<'info> {
         seeds = [b"house_vault"],
         bump
     )]
-    /// CHECK: System account used as house vault
+    /// CHECK: Program-owned PDA vault (lamports-only)
     pub house_vault: UncheckedAccount<'info>,
     
     #[account(mut)]
@@ -232,7 +263,7 @@ pub struct Spin<'info> {
         seeds = [b"house_vault"],
         bump
     )]
-    /// CHECK: System account used as house vault
+    /// CHECK: Program-owned PDA vault (lamports-only)
     pub house_vault: UncheckedAccount<'info>,
     
     #[account(mut)]
@@ -271,10 +302,10 @@ pub struct WithdrawHouseFunds<'info> {
         seeds = [b"house_vault"],
         bump
     )]
-    /// CHECK: System account used as house vault
+    /// CHECK: Program-owned PDA vault (lamports-only)
     pub house_vault: UncheckedAccount<'info>,
     
-    #[account(mut)]
+    #[account(mut, constraint = game_state.authority == authority.key())]
     pub authority: Signer<'info>,
 }
 
@@ -285,7 +316,7 @@ pub struct FundHouseVault<'info> {
         seeds = [b"house_vault"],
         bump
     )]
-    /// CHECK: System account used as house vault
+    /// CHECK: Program-owned PDA vault (lamports-only)
     pub house_vault: UncheckedAccount<'info>,
     
     #[account(mut)]
